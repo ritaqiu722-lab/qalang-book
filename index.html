@@ -4,199 +4,353 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>mnanak na qalang 繪本</title>
+<!-- 下一頁(第 2 頁)素材預載;之後翻頁時由程式動態補上 -->
+<link rel="prefetch" href="img/p1.jpg">
+<link rel="prefetch" href="audio/speech1.mp3">
+<link rel="prefetch" href="audio/music1.mp3">
 <style>
-  :root{
-    --bg:#140f0c; --ink:#f6ead6; --accent:#e9a23b; --red:#8c2a22;
-  }
+  :root{ --bg:#140f0c; --ink:#f6ead6; --accent:#e9a23b; --red:#8c2a22; }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
     font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;overflow:hidden}
   #app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-  /* 4:3 舞台 */
   #stage{position:relative;aspect-ratio:4/3;
     width:min(100vw, calc((100vh - 56px) * 4/3));
     max-height:calc(100vh - 56px);
     background:#000;box-shadow:0 10px 40px #000a;overflow:hidden;touch-action:pan-y}
-  #stage img.page{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
-    opacity:0;transition:opacity .45s ease}
-  #stage img.page.on{opacity:1}
+  #pageImg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  #pageImg.in{animation:fadein .4s ease}
+  @keyframes fadein{from{opacity:.15}to{opacity:1}}
+
   /* 左右翻頁 */
-  .nav{position:absolute;top:50%;transform:translateY(-50%);width:15%;height:60%;
-    display:flex;align-items:center;justify-content:center;border:0;background:none;cursor:pointer;opacity:.0;transition:opacity .2s}
+  .nav{position:absolute;top:50%;transform:translateY(-50%);width:15%;height:60%;z-index:3;
+    display:flex;align-items:center;justify-content:center;border:0;background:none;cursor:pointer;opacity:0;transition:opacity .2s}
   #stage:hover .nav,.nav:focus-visible{opacity:1}
-  .nav img{width:clamp(34px,6vw,64px);filter:drop-shadow(0 0 6px #000)}
-  .nav img{box-sizing:content-box;padding:12px 10px;background:#140f0ccc;border-radius:999px;border:1px solid #e9a23b88}
+  .nav img{box-sizing:content-box;width:clamp(34px,6vw,64px);padding:12px 10px;background:#140f0ccc;border-radius:999px;border:1px solid #e9a23b88}
   #prev{left:0}#next{right:0}
   .nav[disabled]{visibility:hidden}
-  @media (hover:none){.nav{opacity:.8}}
-  /* 底部工具列 */
-  #bar{height:56px;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 10px;
-    background:linear-gradient(#1b1411,#140f0c);border-top:2px solid var(--red)}
-  #bar button{font:inherit;color:var(--ink);background:#2a1f1a;border:1px solid #5a3a2c;border-radius:999px;
-    padding:6px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:14px;white-space:nowrap}
-  #bar button:hover{background:#3a2a22}
-  #bar button[aria-pressed="false"]{opacity:.45}
-  #bar button img{height:22px}
-  #count{min-width:64px;text-align:center;font-variant-numeric:tabular-nums;color:#cbb89a;font-size:14px}
-  #progress{position:absolute;left:0;right:0;bottom:0;height:5px;background:#0006}
+  @media (hover:none){.nav{opacity:.85}}
+
+  /* 頁碼 */
+  #count{position:absolute;top:8px;right:8px;z-index:3;background:#140f0ccc;color:#f1e3c8;padding:3px 11px;border-radius:999px;
+    font-size:13px;font-variant-numeric:tabular-nums;border:1px solid #5a3a2c}
+  #progress{position:absolute;left:0;right:0;bottom:0;height:5px;background:#0006;z-index:3}
   #progress i{display:block;height:100%;width:0;background:var(--accent)}
+
+  /* 載入提示 */
+  #status{position:absolute;top:8px;left:8px;z-index:6;display:none;align-items:center;gap:8px;
+    background:#140f0ce6;border:1px solid var(--accent);border-radius:999px;padding:4px 14px 4px 8px;font-size:14px}
+  #status.show{display:flex}
+  #status img{height:26px;animation:bob 1s ease-in-out infinite}
+  @keyframes bob{50%{transform:translateY(-3px)}}
+
+  /* 失敗與重試 */
+  #errBox{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:8;display:none;width:min(86%,420px);
+    background:#140f0cf2;border:2px solid #d4553f;border-radius:14px;padding:16px 18px;text-align:center;box-shadow:0 8px 30px #000c}
+  #errBox.show{display:block}
+  #errMsg{margin:0 0 12px;line-height:1.55;font-size:15px}
+  #retryBtn{background:var(--accent);color:#2a1408;border:0;border-radius:999px;padding:9px 26px;font:inherit;font-weight:700;cursor:pointer}
+  #retryBtn:disabled{opacity:.5;cursor:default}
+
   /* 封面遮罩 */
   #intro{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
     padding-bottom:7%;background:linear-gradient(transparent 45%,#000b);cursor:pointer;text-align:center}
   #intro .go{background:var(--accent);color:#2a1408;border:0;border-radius:999px;padding:12px 30px;font-size:clamp(16px,2.6vw,24px);font-weight:700;
-    box-shadow:0 4px 18px #000a;animation:pulse 1.8s ease-in-out infinite}
+    box-shadow:0 4px 18px #000a;animation:pulse 1.8s ease-in-out infinite;cursor:pointer}
   #intro small{margin-top:10px;color:#e9dcc3;font-size:clamp(11px,1.6vw,14px);text-shadow:0 1px 3px #000}
-  #intro .spirit{position:absolute;left:4%;bottom:4%;width:14%;opacity:.0}
   @keyframes pulse{50%{transform:scale(1.06)}}
-  #end{position:absolute;inset:0;z-index:4;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;
-    background:#000a;text-align:center}
-  #end.show{display:flex}
-  #end img{width:min(34%,220px);filter:drop-shadow(0 0 12px #e9a23b66)}
-  #end h2{margin:0;font-size:clamp(20px,4vw,34px)}
-  #end button{background:var(--accent);color:#2a1408;border:0;border-radius:999px;padding:10px 26px;font:inherit;font-weight:700;cursor:pointer}
-  @media (max-width:560px){#bar button span{display:none}#bar button{padding:6px 10px}}
+
+  /* 末頁:回封面 */
+  #again{position:absolute;left:50%;bottom:9%;transform:translateX(-50%);z-index:4;display:none;
+    background:var(--accent);color:#2a1408;border:0;border-radius:999px;padding:10px 26px;font:inherit;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 18px #000a}
+  #again.show{display:block}
+
+  /* 除錯面板 */
+  #debugPanel{position:absolute;left:6px;bottom:12px;z-index:7;display:none;max-width:calc(100% - 12px);max-height:62%;overflow:auto;
+    background:#000d;color:#b8f0b8;border:1px solid #3a6a3a;border-radius:8px;padding:8px 10px;margin:0;
+    font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
+  #debugPanel.show{display:block}
+
+  /* 底部工具列 */
+  #bar{height:56px;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 8px;
+    background:linear-gradient(#1b1411,#140f0c);border-top:2px solid var(--red)}
+  #bar button{font:inherit;color:var(--ink);background:#2a1f1a;border:1px solid #5a3a2c;border-radius:999px;
+    padding:6px 13px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:14px;white-space:nowrap}
+  #bar button:hover{background:#3a2a22}
+  #bar button[aria-pressed="true"]{border-color:var(--accent);background:#4a3220;box-shadow:0 0 0 1px var(--accent) inset}
+  #bar button img{height:22px}
+  #bar .ico{font-weight:400;font-size:14px;line-height:1}
+  @media (max-width:420px){
+    #bar{gap:5px;padding:0 4px}
+    #bar button{padding:6px 8px;font-size:12.5px;gap:4px}
+  }
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="stage" aria-live="polite">
+  <div id="stage">
+    <img id="pageImg" src="img/p0.jpg" alt="繪本第 1 頁">
+    <div id="count">1 / 20</div>
+
     <button id="prev" class="nav" aria-label="上一頁"><img src="img/left.png" alt=""></button>
     <button id="next" class="nav" aria-label="下一頁"><img src="img/right.png" alt=""></button>
+
+    <div id="status" role="status" aria-live="polite"><img src="img/spirit.png" alt=""><span>載入中…</span></div>
+
+    <div id="errBox" role="alert">
+      <p id="errMsg">素材載入失敗。</p>
+      <button id="retryBtn" type="button" disabled>重試</button>
+    </div>
+
     <div id="intro" role="button" tabindex="0" aria-label="開始閱讀">
       <button class="go" type="button">點一下 開始閱讀</button>
-      <small>會有旁白與音樂,請把音量打開</small>
+      <small>會有聲音與音樂,請把音量打開</small>
     </div>
-    <div id="end">
-      <img src="img/spirit.png" alt="">
-      <h2>故事結束了</h2>
-      <button id="again" type="button">再讀一次</button>
-    </div>
+
+    <button id="again" type="button">回到封面</button>
+    <pre id="debugPanel" aria-label="除錯資訊"></pre>
     <div id="progress"><i></i></div>
   </div>
+
   <div id="bar">
-    <button id="btnVoice" aria-pressed="true" title="旁白"><img src="img/read.png" alt=""><span>旁白</span></button>
-    <button id="btnMusic" aria-pressed="true" title="配樂">♪<span>配樂</span></button>
-    <button id="btnAuto"  aria-pressed="false" title="朗讀完自動翻頁">⏭<span>自動翻頁</span></button>
-    <button id="btnReplay" title="重聽這一頁">↻<span>重聽</span></button>
-    <div id="count">1 / 20</div>
+    <button id="readBtn"  type="button" aria-pressed="false" aria-label="朗讀" title="朗讀這一頁"><img src="img/read.png" alt=""><span>朗讀</span></button>
+    <button id="muteBtn"  type="button" aria-pressed="false" aria-label="靜音" title="靜音 / 解除靜音"><b class="ico">🔊</b><span>靜音</span></button>
+    <button id="autoBtn"  type="button" aria-pressed="false" aria-label="自動播放" title="每頁自動朗讀,讀完自動翻頁"><b class="ico">⏭</b><span>自動播放</span></button>
+    <button id="debugBtn" type="button" aria-pressed="false" aria-label="除錯" title="顯示除錯資訊(快捷鍵 D)"><b class="ico">🐞</b><span>除錯</span></button>
   </div>
 </div>
 
 <script>
 /* ============ 設定 ============ */
 const TOTAL = 20;                 // 頁數 (p0.jpg ~ p19.jpg)
-const VOICE_VOL = 1.0;            // 旁白音量
-const MUSIC_VOL = 0.28;           // 每頁配樂音量 (比旁白小聲)
+const VOICE_VOL = 1.0;            // 朗讀音量
+const MUSIC_VOL = 0.28;           // 每頁配樂音量
 const BGM_VOL   = 0.5;            // 封面主題曲音量
-const BGM_ONLY_ON_COVER = true;   // true: 主題曲只在封面播放; false: 全書循環低音量播放
+const DUCK      = 0.25;           // 朗讀時,背景音樂降為原本的幾倍
+const BGM_ONLY_ON_COVER = true;   // true: 主題曲只在封面播放; false: 全書低音量循環
+const AUTO_DEFAULT = false;       // 「自動播放」預設是否開啟
 /* =============================== */
 
 const $ = s => document.querySelector(s);
-const stage = $('#stage');
-let cur = 0, started = false;
-let voiceOn = true, musicOn = true, autoOn = false;
-try{ const s = JSON.parse(localStorage.getItem('qalang-prefs')||'{}');
-  if('voiceOn' in s) voiceOn = s.voiceOn; if('musicOn' in s) musicOn = s.musicOn; if('autoOn' in s) autoOn = s.autoOn; }catch(e){}
-const save = () => { try{ localStorage.setItem('qalang-prefs', JSON.stringify({voiceOn,musicOn,autoOn})) }catch(e){} };
+const img = $('#pageImg'), intro = $('#intro');
+const clamp01 = v => Math.max(0, Math.min(1, v));
 
-// 圖片層
-const imgs = [];
-for(let i=0;i<TOTAL;i++){
-  const im = new Image(); im.className='page'; im.alt='繪本第 '+(i+1)+' 頁'; im.decoding='async';
-  im.src = `img/p${i}.jpg`; if(i>1) im.loading='lazy';
-  stage.insertBefore(im, stage.firstChild); imgs[i]=im;
-}
+let cur = 0, started = false, muted = false, autoOn = AUTO_DEFAULT, navToken = 0;
 
-// 音訊
+/* ---------- 除錯記錄 ---------- */
+const logs = [];
+function log(m){ logs.unshift(new Date().toTimeString().slice(0,8)+'  '+m); if(logs.length>12) logs.length=12; }
+
+/* ---------- 音訊(各一個元素,不會重疊) ---------- */
 const voice = new Audio(), music = new Audio(), bgm = new Audio('audio/bgm.mp3');
 music.loop = true; bgm.loop = true;
-voice.volume = VOICE_VOL; music.volume = MUSIC_VOL; bgm.volume = BGM_VOL;
-voice.preload = music.preload = 'auto';
+voice.volume = VOICE_VOL; music.volume = MUSIC_VOL; bgm.volume = 0;
+[voice,music,bgm].forEach(a => a.preload = 'auto');
+const AUDIO = {voice, music, bgm};
 
-function fade(a, to, ms=700){
-  clearInterval(a._f); const from = a.volume, t0 = performance.now();
-  a._f = setInterval(()=>{
-    const k = Math.min(1,(performance.now()-t0)/ms);
-    a.volume = Math.max(0,Math.min(1, from+(to-from)*k));
-    if(k>=1){ clearInterval(a._f); if(to===0) a.pause(); }
-  },40);
-}
-const play = a => a.play().catch(()=>{});
+const isNarrating = () => !voice.paused && !voice.ended;
+function play(a){ const p = a.play(); if(p && p.catch) p.catch(e => { if(e.name!=='AbortError') log('播放被擋: '+a.getAttribute('src')+' ('+e.name+')'); }); }
 
-function setAudio(){
-  // 旁白
-  voice.pause(); voice.src = `audio/speech${cur}.mp3`; voice.currentTime = 0;
-  if(voiceOn) play(voice);
-  // 配樂
-  const src = `audio/music${cur}.mp3`;
-  if(!music.src.endsWith(src)){ music.src = src; }
-  if(musicOn){ music.volume = 0; play(music); fade(music, MUSIC_VOL, 900); } else music.pause();
-  // 主題曲
-  if(cur===0 || !BGM_ONLY_ON_COVER){
-    if(musicOn && bgm.paused){ bgm.volume = 0; play(bgm); fade(bgm, cur===0?BGM_VOL:0.12, 900); }
-    else if(musicOn) fade(bgm, cur===0?BGM_VOL:0.12, 600);
-  } else if(!bgm.paused) fade(bgm,0,800);
+function ramp(a, to, ms, pauseAtZero){
+  clearInterval(a._f);
+  const from = a.volume, t0 = performance.now();
+  a._f = setInterval(() => {
+    const k = Math.min(1, (performance.now()-t0)/ms);
+    a.volume = clamp01(from + (to-from)*k);
+    if(k >= 1){ clearInterval(a._f); if(to===0 && pauseAtZero) a.pause(); }
+  }, 30);
 }
 
-function show(n, dir){
+/* 背景音樂音量:朗讀時降低,朗讀結束/暫停恢復 */
+function updateVolumes(ms = 250){
+  const f = isNarrating() ? DUCK : 1;
+  ramp(music, MUSIC_VOL * f, ms, false);
+  const bgmBase = cur===0 ? BGM_VOL : (BGM_ONLY_ON_COVER ? 0 : 0.12);
+  ramp(bgm, bgmBase * f, ms, bgmBase===0);
+  $('#readBtn').setAttribute('aria-pressed', isNarrating());
+}
+
+/* ---------- 載入提示 / 失敗重試 ---------- */
+const loading = new Set(), failed = new Set();
+let loadTimer = null;
+function refreshStatus(){
+  clearTimeout(loadTimer);
+  if(!loading.size){ $('#status').classList.remove('show'); return; }
+  loadTimer = setTimeout(() => { if(loading.size) $('#status').classList.add('show'); }, 350);
+}
+function setLoading(k, on){ on ? loading.add(k) : loading.delete(k); refreshStatus(); }
+
+const NAMES = {img:'插圖', voice:'朗讀音檔', music:'配樂', bgm:'主題曲'};
+function showErr(){
+  const box = $('#errBox'), btn = $('#retryBtn');
+  if(!failed.size){ box.classList.remove('show'); btn.disabled = true; return; }
+  $('#errMsg').textContent = `第 ${cur+1} 頁的${[...failed].map(k=>NAMES[k]).join('、')}載入失敗。請確認網路後按「重試」。`;
+  box.classList.add('show'); btn.disabled = false;
+}
+function fail(k){ failed.add(k); loading.delete(k); refreshStatus(); showErr(); log('載入失敗: '+k); }
+function ok(k){ loading.delete(k); if(failed.delete(k)) showErr(); refreshStatus(); }
+
+img.addEventListener('load',  () => { ok('img'); img.classList.remove('in'); void img.offsetWidth; img.classList.add('in'); });
+img.addEventListener('error', () => fail('img'));
+for(const [k,a] of Object.entries(AUDIO)){
+  a.addEventListener('error', () => { if(a.getAttribute('src')) fail(k); });
+  ['loadstart','waiting'].forEach(ev => a.addEventListener(ev, () => { if(a.getAttribute('src')) setLoading(k,true); }));
+  ['canplay','playing','loadeddata'].forEach(ev => a.addEventListener(ev, () => ok(k)));
+}
+
+$('#retryBtn').onclick = () => {
+  const bust = '?r=' + Date.now(), keys = [...failed];
+  log('重試: '+keys.join(','));
+  failed.clear(); showErr();
+  if(keys.includes('img'))   { setLoading('img',true); img.src = `img/p${cur}.jpg${bust}`; }
+  if(keys.includes('voice')) { voice.src = `audio/speech${cur}.mp3${bust}`; voice.load(); setLoading('voice',true); }
+  if(keys.includes('music')) { music.src = `audio/music${cur}.mp3${bust}`; music.load(); setLoading('music',true); if(started) play(music); }
+  if(keys.includes('bgm'))   { bgm.src = `audio/bgm.mp3${bust}`; bgm.load(); setLoading('bgm',true); if(started && cur===0) play(bgm); }
+};
+
+/* ---------- 預載下一頁(圖片、配樂、朗讀) ---------- */
+const preHold = new Map();   // 保留引用,避免被回收而中止下載
+const preLinks = new Set();
+function addLink(href){
+  if(preLinks.has(href)) return; preLinks.add(href);
+  const l = document.createElement('link'); l.rel = 'prefetch'; l.href = href; l.dataset.pre = '1'; document.head.appendChild(l);
+}
+function preloadNext(){
+  for(const n of [cur+1, cur+2]){
+    if(n >= TOTAL) continue;
+    const u = `img/p${n}.jpg`;
+    addLink(u);
+    if(!preHold.has(u)){ const im = new Image(); im.src = u; preHold.set(u, im); }
+  }
+  const n = cur+1; if(n >= TOTAL) return;
+  for(const u of [`audio/speech${n}.mp3`, `audio/music${n}.mp3`]){
+    addLink(u);
+    if(!preHold.has(u)){ const a = new Audio(); a.preload = 'auto'; a.src = u; preHold.set(u, a); }
+  }
+}
+
+/* ---------- 翻頁 ---------- */
+function setImage(i){
+  const url = `img/p${i}.jpg`;
+  img.alt = `繪本第 ${i+1} 頁`;
+  if(img.getAttribute('src') === url && img.complete && img.naturalWidth){ ok('img'); return; }
+  setLoading('img', true);
+  img.src = url;
+}
+function startMusic(){
+  const url = `audio/music${cur}.mp3`;
+  if(!(music.getAttribute('src')||'').startsWith(url)) music.src = url;
+  if(music.paused) music.volume = 0;
+  play(music);
+  if(cur===0 || !BGM_ONLY_ON_COVER){ if(bgm.paused){ bgm.volume = 0; play(bgm); } }
+  updateVolumes(700);
+}
+function show(n){
   cur = Math.max(0, Math.min(TOTAL-1, n));
-  imgs.forEach((im,i)=>im.classList.toggle('on', i===cur));
-  $('#prev').disabled = cur===0; $('#next').disabled = false;
+  navToken++;
+  // 舊頁朗讀一律停止
+  voice.pause();
+  failed.clear(); showErr();
+  $('#prev').disabled = cur === 0;
+  $('#next').disabled = cur === TOTAL-1;          // 末頁:下一頁不可按
   $('#count').textContent = `${cur+1} / ${TOTAL}`;
-  $('#progress i').style.width = ((cur+1)/TOTAL*100)+'%';
-  $('#end').classList.remove('show');
-  if(started) setAudio();
-  // 預載下一頁
-  [cur+1,cur+2].forEach(i=>{ if(i<TOTAL){ const a=new Audio(); a.preload='auto'; a.src=`audio/speech${i}.mp3`; }});
-  history.replaceState(null,'','#'+(cur+1));
+  $('#progress i').style.width = ((cur+1)/TOTAL*100) + '%';
+  $('#again').classList.toggle('show', cur === TOTAL-1);
+  setImage(cur);
+  voice.src = `audio/speech${cur}.mp3`;           // 先載入本頁朗讀,按「朗讀」才播
+  if(started){ startMusic(); if(autoOn) narrate(); }
+  updateVolumes(300);
+  preloadNext();
+  try{ history.replaceState(null,'','#'+(cur+1)); }catch(e){}
+  log(`翻到第 ${cur+1} 頁`);
 }
-function next(){ if(cur<TOTAL-1) show(cur+1); else finish(); }
-function prev(){ if(cur>0) show(cur-1); }
-function finish(){
-  voice.pause(); fade(music,0,1200); fade(bgm,0,1200);
-  $('#end').classList.add('show');
-}
-function begin(){
-  if(started) return; started = true;
-  $('#intro').style.display='none';
-  setAudio();
+const next = () => { unlock(); if(cur < TOTAL-1) show(cur+1); };
+const prev = () => { unlock(); if(cur > 0) show(cur-1); };
+
+function unlock(){ if(started) return; started = true; intro.style.display = 'none'; startMusic(); }
+function narrate(){
+  unlock();
+  voice.currentTime = 0;                           // 連按只會從頭重播,不會疊聲
+  play(voice);
 }
 
-voice.addEventListener('ended', ()=>{ if(autoOn && started && voiceOn){ setTimeout(next, 900); } });
+/* 朗讀事件 */
+['play','playing','pause'].forEach(ev => voice.addEventListener(ev, () => updateVolumes(220)));
+voice.addEventListener('ended', () => {
+  updateVolumes(220);
+  if(autoOn && cur < TOTAL-1){ const t = navToken; setTimeout(() => { if(t===navToken && autoOn) next(); }, 900); }
+});
 
+/* ---------- 控制 ---------- */
 $('#prev').onclick = prev; $('#next').onclick = next;
-$('#intro').onclick = begin;
-$('#intro').onkeydown = e => { if(e.key==='Enter'||e.key===' ') begin(); };
-$('#again').onclick = () => { show(0); };
+intro.onclick = () => { unlock(); };
+intro.onkeydown = e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); unlock(); } };
+$('#again').onclick = () => { unlock(); show(0); };
+$('#readBtn').onclick = narrate;
 
-function sync(){
-  $('#btnVoice').setAttribute('aria-pressed', voiceOn);
-  $('#btnMusic').setAttribute('aria-pressed', musicOn);
-  $('#btnAuto').setAttribute('aria-pressed', autoOn);
+function syncButtons(){
+  const m = $('#muteBtn'); m.setAttribute('aria-pressed', muted);
+  m.setAttribute('aria-label', muted ? '解除靜音' : '靜音');
+  m.querySelector('span').textContent = muted ? '解除靜音' : '靜音';
+  m.querySelector('.ico').textContent = muted ? '🔇' : '🔊';
+  $('#autoBtn').setAttribute('aria-pressed', autoOn);
+  $('#debugBtn').setAttribute('aria-pressed', $('#debugPanel').classList.contains('show'));
 }
-$('#btnVoice').onclick = () => { voiceOn=!voiceOn; save(); sync(); if(!started) return; voiceOn? play(voice) : voice.pause(); };
-$('#btnMusic').onclick = () => { musicOn=!musicOn; save(); sync(); if(!started) return;
-  if(musicOn){ setAudio(); } else { music.pause(); bgm.pause(); } };
-$('#btnAuto').onclick  = () => { autoOn=!autoOn; save(); sync(); };
-$('#btnReplay').onclick = () => { if(!started) return begin(); voice.currentTime=0; if(voiceOn) play(voice); };
+$('#muteBtn').onclick = () => { muted = !muted; [voice,music,bgm].forEach(a => a.muted = muted); log(muted?'靜音':'解除靜音'); syncButtons(); };
+$('#autoBtn').onclick = () => { autoOn = !autoOn; syncButtons(); if(autoOn) narrate(); };
 
-// 鍵盤、滑動
-addEventListener('keydown', e=>{
-  if(!started){ if(e.key==='Enter'||e.key===' ') begin(); return; }
-  if(e.key==='ArrowRight'||e.key==='PageDown') next();
-  else if(e.key==='ArrowLeft'||e.key==='PageUp') prev();
-  else if(e.key===' '){ e.preventDefault(); voice.paused? play(voice) : voice.pause(); }
+/* ---------- 除錯面板 ---------- */
+let dbgTimer = null;
+function describe(a){
+  if(!a.getAttribute('src')) return '(無)';
+  const d = isFinite(a.duration) ? a.duration.toFixed(1) : '?';
+  return `${a.getAttribute('src')}  ${a.paused?'暫停':'播放中'}  ${a.currentTime.toFixed(1)}/${d}s  音量=${a.volume.toFixed(2)}  靜音=${a.muted}  ready=${a.readyState}`;
+}
+function renderDebug(){
+  $('#debugPanel').textContent = [
+    `頁面: ${cur+1}/${TOTAL}   已開始: ${started}   靜音: ${muted}   自動播放: ${autoOn}`,
+    `圖片: ${img.getAttribute('src')}  完成=${img.complete}  尺寸=${img.naturalWidth}x${img.naturalHeight}`,
+    `朗讀: ${describe(voice)}`,
+    `配樂: ${describe(music)}`,
+    `主題曲: ${describe(bgm)}`,
+    `載入中: [${[...loading]}]   失敗: [${[...failed]}]`,
+    `已預載: ${[...preHold.keys()].join(', ')||'(無)'}`,
+    '── 記錄 ──', ...logs
+  ].join('\n');
+}
+function toggleDebug(){
+  const p = $('#debugPanel'); p.classList.toggle('show');
+  clearInterval(dbgTimer);
+  if(p.classList.contains('show')){ renderDebug(); dbgTimer = setInterval(renderDebug, 250); }
+  syncButtons();
+}
+$('#debugBtn').onclick = toggleDebug;
+
+/* ---------- 鍵盤、滑動 ---------- */
+addEventListener('keydown', e => {
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  if(e.key === 'ArrowRight' || e.key === 'PageDown'){ e.preventDefault(); next(); }
+  else if(e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); prev(); }
+  else if(e.key === ' '){                       // 空白鍵:朗讀 播放/暫停
+    e.preventDefault();
+    if(!started || voice.ended || (voice.paused && voice.currentTime===0)) narrate();
+    else if(voice.paused) play(voice); else voice.pause();
+  }
+  else if(e.key === 'd' || e.key === 'D'){ toggleDebug(); }
 });
-let x0=null;
-stage.addEventListener('touchstart', e=>{ x0=e.touches[0].clientX },{passive:true});
-stage.addEventListener('touchend', e=>{
-  if(x0===null||!started) return; const dx=e.changedTouches[0].clientX-x0; x0=null;
-  if(Math.abs(dx)>50){ dx<0? next() : prev(); }
+let x0 = null;
+$('#stage').addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, {passive:true});
+$('#stage').addEventListener('touchend', e => {
+  if(x0===null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null;
+  if(Math.abs(dx) > 50){ dx < 0 ? next() : prev(); }
 });
 
-sync();
-const h = parseInt(location.hash.slice(1),10);
-show(h>=1&&h<=TOTAL ? h-1 : 0);
+/* ---------- 啟動 ---------- */
+syncButtons();
+failed.clear(); showErr();
+const h = parseInt(location.hash.slice(1), 10);
+show(h >= 1 && h <= TOTAL ? h-1 : 0);
 </script>
 </body>
 </html>
